@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Keywords Prediction</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.26.0/cytoscape.min.js"></script>
+    <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+    <h1>Your Map of Meaning Generator</h1>
+
+    <div id="session-controls">
+        <button onclick="exportData()">Export</button>
+        <input type="file" id="import-file" style="display: none" onchange="importData(event)">
+        <button onclick="document.getElementById('import-file').click()">Import</button>
+        <button onclick="clearGraph()">Clear Graph</button>
+    </div>
+
+    <div class="container">
+        <div class="keywords-panel">
+            <h3>Current Reflection Prompt</h3>
+            <p>What are the most important things you learned today?</p>
+            <div>
+                <input list="keywords-list" id="keyword-input" placeholder="Select or type a keyword..." autocomplete="off">
+                <div id="suggestions-list" class="suggestions-list"></div>
+            </div>
+            <div id="current-keywords"></div>
+        </div>
+
+        <div id="graph"></div>
+    </div>
+
+    <script>
+        // Data structures
+        let keywords = [];
+        let associations = {};
+
+        // Initialize Cytoscape
+        // Replace the direct Cytoscape initialization with this:
+        let cy; // Declare cy in the global scope
+
+        async function initializeCytoscape() {
+            try {
+                const response = await fetch('cytoscape_style.json');
+                const styleConfig = await response.json();
+                
+                cy = cytoscape({
+                    container: document.getElementById('graph'),
+                    style: styleConfig
+                });
+                
+                // Load data from localStorage on startup
+                const savedKeywords = localStorage.getItem('keywords');
+                const savedAssociations = localStorage.getItem('associations');
+
+                if (savedKeywords && savedAssociations) {
+                    keywords = JSON.parse(savedKeywords);
+                    associations = JSON.parse(savedAssociations);
+                    updateUI();
+                }
+            } catch (error) {
+                console.error('Error loading style config:', error);
+            }
+        }
+
+        // Initialize select2 when document is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            const keywordInput = document.getElementById('keyword-input');
+            const suggestionsList = document.getElementById('suggestions-list');
+            let selectedIndex = -1;
+            
+            keywordInput.addEventListener('keydown', function(event) {
+                const suggestions = suggestionsList.getElementsByClassName('suggestion-item');
+                
+                switch(event.key) {
+                    case 'ArrowDown':
+                        event.preventDefault();
+                        selectedIndex = Math.min(selectedIndex + 1, suggestions.length - 1);
+                        updateSelection();
+                        break;
+                    case 'ArrowUp':
+                        event.preventDefault();
+                        selectedIndex = Math.max(selectedIndex - 1, -1);
+                        updateSelection();
+                        break;
+                    case 'Enter':
+                        event.preventDefault();
+                        const trimmedValue = keywordInput.value.trim();
+
+                        if (trimmedValue === '') {
+                            // If input is blank, save current session and start a new one
+                            saveSession(); // Call saveSession first
+                            newSession();  // Then start a new session
+                        } else if (selectedIndex >= 0 && suggestions[selectedIndex]) {
+                            // If a suggestion is selected, use it
+                            const selectedKeyword = suggestions[selectedIndex].textContent;
+                            addKeyword(selectedKeyword); // Pass the keyword directly
+                        } else {
+                            // Otherwise, add the typed keyword
+                            addKeyword(trimmedValue); // Pass the trimmed value directly
+                        }
+                        // Clear input, hide suggestions and reset selection in all cases
+                        keywordInput.value = '';
+                        keywordInput.value = '';
+                        suggestionsList.style.display = 'none';
+                        selectedIndex = -1;
+                        break;
+                    case 'Escape':
+                        suggestionsList.style.display = 'none';
+                        selectedIndex = -1;
+                        break;
+                }
+            });
+
+            keywordInput.addEventListener('input', function() {
+                const value = this.value.trim().toLowerCase();
+                if (value) {
+                    // Filter matching keywords
+                    const matches = keywords.filter(k => k.toLowerCase().includes(value));
+                    
+                    // Update suggestions list
+                    suggestionsList.innerHTML = matches
+                        .map(k => `<div class="suggestion-item">${k}</div>`)
+                        .join('');
+                    
+                    // Show suggestions if we have matches
+                    suggestionsList.style.display = matches.length ? 'block' : 'none';
+                    selectedIndex = -1;
+                    
+                    // Add click handlers to suggestions
+                    const suggestions = suggestionsList.getElementsByClassName('suggestion-item');
+                    Array.from(suggestions).forEach((item, index) => {
+                        item.addEventListener('click', () => {
+                            keywordInput.value = item.textContent;
+                            addKeyword();
+                            suggestionsList.style.display = 'none';
+                        });
+                        
+                        item.addEventListener('mouseover', () => {
+                            selectedIndex = index;
+                            updateSelection();
+                        });
+                    });
+                } else {
+                    suggestionsList.style.display = 'none';
+                    selectedIndex = -1;
+                }
+            });
+
+            // Hide suggestions when clicking outside
+            document.addEventListener('click', function(event) {
+                if (!keywordInput.contains(event.target) && !suggestionsList.contains(event.target)) {
+                    suggestionsList.style.display = 'none';
+                    selectedIndex = -1;
+                }
+            });
+
+            function updateSelection() {
+                const suggestions = suggestionsList.getElementsByClassName('suggestion-item');
+                Array.from(suggestions).forEach((item, index) => {
+                    item.classList.toggle('selected', index === selectedIndex);
+                });
+                
+                if (selectedIndex >= 0) {
+                    const selected = suggestions[selectedIndex];
+                    if (selected) {
+                        selected.scrollIntoView({ block: 'nearest' });
+                    }
+                }
+            }
+        });
+
+        // Add this at the end of your script section:
+        // Initialize when the document is ready
+        document.addEventListener('DOMContentLoaded', initializeCytoscape);
+
+        // Current session
+        let currentKeywords = [];
+
+        function addKeyword(keywordValue) {
+            const keyword = keywordValue || document.getElementById('keyword-input').value.trim().toLowerCase();
+            const suggestionsList = document.getElementById('suggestions-list');
+
+            if (keyword && !currentKeywords.includes(keyword)) {
+                currentKeywords.push(keyword);
+                document.getElementById('keyword-input').value = '';
+                if (!keywords.includes(keyword)) {
+                    keywords.push(keyword);
+                }
+                updateUI();
+                predictNextKeywords();
+            }
+
+            // Clear input and suggestions
+            suggestionsList.style.display = 'none';
+        }
+
+        function deleteKeyword(index) {
+            currentKeywords.splice(index, 1);
+            updateUI();
+            predictNextKeywords();
+        }
+
+        function updateUI() {
+            // Update current keywords display
+            const container = document.getElementById('current-keywords');
+            container.innerHTML = currentKeywords.map((keyword, index) => `
+                <span class="current-keyword">
+                    ${keyword}
+                    <span class="delete-btn" onclick="deleteKeyword(${index})">×</span>
+                </span>
+            `).join('');
+
+            // Update graph
+            updateGraph();
+        }
+
+        function updateGraph() {
+            cy.elements().remove();
+
+            // Add nodes
+            keywords.forEach((keyword, index) => {
+                cy.add({
+                    group: 'nodes',
+                    data: {
+                        id: String(index),
+                        label: keyword
+                    },
+                    classes: currentKeywords.includes(keyword) ? 'current' : ''
+                });
+            });
+
+            // Find the maximum distance across all associations
+            let maxDistance = 0;
+            Object.values(associations).forEach(distances => {
+                maxDistance = Math.max(maxDistance, ...distances);
+            });
+
+            // Add edges with calculated weights
+            Object.entries(associations).forEach(([key, distances]) => {
+                const [id1, id2] = key.split('-');
+
+                // Calculate the weight for this edge
+                let totalWeight = 0;
+                distances.forEach(distance => {
+                    var normalizedDistance = 0; // Normalize distance
+                    if (maxDistance === 0) {
+                        normalizedDistance = 0; // Avoid division by zero
+                    }
+                    else {
+                        normalizedDistance = distance / maxDistance; // Normalize distance
+                    }
+                    const weight = 1 - normalizedDistance; // Calculate weight
+                    totalWeight += weight; // Sum up weights
+                });
+
+                cy.add({
+                    group: 'edges',
+                    data: {
+                        source: id1,
+                        target: id2,
+                        weight: totalWeight // Add total weight to the edge data
+                    }
+                });
+            });
+
+            // Layout
+            cy.layout({ name: 'circle' }).run();
+        }
+
+        function predictNextKeywords() {
+            const suggestionsList = document.getElementById('suggestions-list');
+
+            if (currentKeywords.length === 0) {
+                suggestionsList.innerHTML = ''; // Clear suggestions if no current keywords
+                return;
+            }
+
+            // Get current keyword indices
+            const currentIndices = currentKeywords.map(k => keywords.indexOf(k));
+
+            // Find candidate keywords
+            const candidates = {};
+
+            Object.entries(associations).forEach(([key, [id1, id2, distance]]) => {
+                const [idx1, idx2] = key.split('-').map(Number);
+
+                if (currentIndices.includes(idx1) && !currentIndices.includes(idx2)) {
+                    candidates[idx2] = candidates[idx2] || [];
+                    candidates[idx2].push(distance);
+                } else if (currentIndices.includes(idx2) && !currentIndices.includes(idx1)) {
+                    candidates[idx1] = candidates[idx1] || [];
+                    candidates[idx1].push(distance);
+                }
+            });
+
+            // Calculate scores
+            const scores = Object.entries(candidates).map(([idx, distances]) => {
+                const avgDistance = distances.reduce((a, b) => a + b, 0) / distances.length;
+                return {
+                    keyword: keywords[idx],
+                    score: 1 / (1 + avgDistance)
+                };
+            });
+
+            // Sort predictions by score
+            scores.sort((a, b) => b.score - a.score);
+
+            // Add predictions to the suggestions list
+            const predictionsHTML = scores
+                .slice(0, 3) // Limit to top 3 predictions
+                .map(({ keyword }) => `
+                    <div class="suggestion-item prediction-item">${keyword}</div>
+                `)
+                .join('');
+
+            // Append predictions to the suggestions list
+            suggestionsList.innerHTML += predictionsHTML;
+
+            // Add click handlers for predictions
+            const predictionItems = suggestionsList.getElementsByClassName('prediction-item');
+            Array.from(predictionItems).forEach(item => {
+                item.addEventListener('click', () => {
+                    addKeyword(item.textContent);
+                    suggestionsList.style.display = 'none';
+                });
+            });
+        }
+
+        function addPrediction(keyword) {
+            if (!currentKeywords.includes(keyword)) {
+                currentKeywords.push(keyword);
+                updateUI();
+                predictNextKeywords();
+            }
+        }
+
+        function newSession() {
+            currentKeywords = [];
+            updateUI();
+            predictNextKeywords();
+        }
+
+        function saveSession() {
+            // Create associations for current session
+            for (let i = 0; i < currentKeywords.length; i++) {
+                for (let j = i + 1; j < currentKeywords.length; j++) {
+                    const idx1 = keywords.indexOf(currentKeywords[i]);
+                    const idx2 = keywords.indexOf(currentKeywords[j]);
+                    const distance = j - i - 1;
+
+                    // Create a key for the pair (always in ascending order)
+                    const key = `${Math.min(idx1, idx2)}-${Math.max(idx1, idx2)}`;
+
+                    // If the key already exists, append the new distance
+                    if (associations[key]) {
+                        associations[key].push(distance);
+                    } else {
+                        // Otherwise, initialize the key with an array of distances
+                        associations[key] = [distance];
+                    }
+                }
+            }
+
+            // Save to localStorage
+            localStorage.setItem('keywords', JSON.stringify(keywords));
+            localStorage.setItem('associations', JSON.stringify(associations));
+        }
+
+        function exportData() {
+            const data = {
+                keywords,
+                associations
+            };
+
+            const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'keywords-data.json';
+            a.click();
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const data = JSON.parse(e.target.result);
+                keywords = data.keywords;
+                associations = data.associations;
+
+                localStorage.setItem('keywords', JSON.stringify(keywords));
+                localStorage.setItem('associations', JSON.stringify(associations));
+
+                updateUI();
+                predictNextKeywords();
+            };
+
+            reader.readAsText(file);
+        }
+
+        // Load data from localStorage on startup
+        const savedKeywords = localStorage.getItem('keywords');
+        const savedAssociations = localStorage.getItem('associations');
+
+        if (savedKeywords && savedAssociations) {
+            keywords = JSON.parse(savedKeywords);
+            associations = JSON.parse(savedAssociations);
+            updateUI();
+        }
+
+        function clearGraph() {
+            // Clear the Cytoscape graph
+            cy.elements().remove();
+
+            // Reset keywords and associations
+            keywords = [];
+            associations = {};
+            currentKeywords = [];
+
+            // Clear localStorage
+            localStorage.removeItem('keywords');
+            localStorage.removeItem('associations');
+
+            // Update the UI
+            updateUI();
+        }
+    </script>
+</body>
+</html>

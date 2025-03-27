@@ -1,0 +1,30 @@
+[
+  {
+    "selector": "node",
+    "style": {
+      "label": "data(label)",
+      "background-color": "#666",
+      "width": 30,
+      "height": 30
+    }
+  },
+  {
+    "selector": "edge",
+    "style": {
+      "width": "mapData(weight, 0, 5, 1, 10)",
+      "line-color": "#999"
+    }
+  },
+  {
+    "selector": ".current",
+    "style": {
+      "background-color": "#2196F3"
+    }
+  },
+  {
+    "selector": ".predicted",
+    "style": {
+      "background-color": "#4CAF50"
+    }
+  }
+]

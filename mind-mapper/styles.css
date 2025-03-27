@@ -1,0 +1,85 @@
+body {
+    font-family: Arial, sans-serif;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+.container {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 20px;
+}
+.keywords-panel {
+    padding: 20px;
+    background: #f5f5f5;
+    border-radius: 8px;
+}
+#graph {
+    height: 600px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+}
+.prediction {
+    margin: 10px 0;
+    padding: 10px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.prediction:hover {
+    background: #f0f0f0;
+}
+.current-keyword {
+    display: inline-block;
+    margin: 5px;
+    padding: 5px 10px;
+    background: #e0e0e0;
+    border-radius: 15px;
+}
+.delete-btn {
+    margin-left: 5px;
+    cursor: pointer;
+    color: red;
+}
+#session-controls {
+    margin-bottom: 20px;
+}
+
+select#keyword-input {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 16px;
+    margin-bottom: 10px;
+}
+
+select#keyword-input option {
+    padding: 8px;
+}
+
+.suggestions-list {
+    position: absolute;
+    max-height: 200px;
+    overflow-y: auto;
+    background: white;
+    border: 1px solid #ddd;
+    border-top: none;
+    width: 100%;
+    display: none;
+    z-index: 1000;
+}
+
+.suggestion-item {
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+.suggestion-item.selected {
+    background-color: #f0f0f0;
+}
+
+.keywords-panel {
+    position: relative;
+}
