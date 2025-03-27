@@ -12,6 +12,7 @@
 
     <div id="session-controls">
         <button onclick="exportData()">Export</button>
+        <button onclick="exportEdgesToClipboard()">Export Edges to Clipboard</button>
         <input type="file" id="import-file" style="display: none" onchange="importData(event)">
         <button onclick="document.getElementById('import-file').click()">Import</button>
         <button onclick="clearGraph()">Clear Graph</button>
@@ -216,6 +217,33 @@
             updateGraph();
         }
 
+        // Function to calculate total weight and add edges
+        function calculateEdges(associations, maxDistance) {
+            const edges = [];
+
+            Object.entries(associations).forEach(([key, distances]) => {
+                const [id1, id2] = key.split('-');
+
+                // Calculate the weight for this edge
+                let totalWeight = 0;
+                distances.forEach(distance => {
+                    let normalizedDistance = 0; // Normalize distance
+                    if (maxDistance !== 0) {
+                        normalizedDistance = distance / maxDistance; // Normalize distance
+                    }
+                    const weight = 1 - normalizedDistance; // Calculate weight
+                    totalWeight += weight; // Sum up weights
+                });
+
+                // Add edge to the list
+                edges.push({ source: id1, target: id2, weight: totalWeight });
+            });
+
+            // Return edges sorted by weight in descending order
+            return edges.sort((a, b) => b.weight - a.weight);
+        }
+
+        // Updated updateGraph function to use the new calculateAndAddEdges function
         function updateGraph() {
             cy.elements().remove();
 
@@ -237,36 +265,26 @@
                 maxDistance = Math.max(maxDistance, ...distances);
             });
 
-            // Add edges with calculated weights
-            Object.entries(associations).forEach(([key, distances]) => {
-                const [id1, id2] = key.split('-');
+            // Calculate edges
+            const edges = calculateEdges(associations, maxDistance);
 
-                // Calculate the weight for this edge
-                let totalWeight = 0;
-                distances.forEach(distance => {
-                    var normalizedDistance = 0; // Normalize distance
-                    if (maxDistance === 0) {
-                        normalizedDistance = 0; // Avoid division by zero
-                    }
-                    else {
-                        normalizedDistance = distance / maxDistance; // Normalize distance
-                    }
-                    const weight = 1 - normalizedDistance; // Calculate weight
-                    totalWeight += weight; // Sum up weights
-                });
-
+            // Add edges to Cytoscape
+            edges.forEach(edge => {
                 cy.add({
                     group: 'edges',
                     data: {
-                        source: id1,
-                        target: id2,
-                        weight: totalWeight // Add total weight to the edge data
+                        source: edge.source,
+                        target: edge.target,
+                        weight: edge.weight
                     }
                 });
             });
 
             // Layout
-            cy.layout({ name: 'circle' }).run();
+            cy.layout({ name: 'cose' }).run();
+
+            // Log sorted edges (optional, for debugging)
+            console.log('Sorted Edges:', edges);
         }
 
         function predictNextKeywords() {
@@ -426,6 +444,32 @@
 
             // Update the UI
             updateUI();
+        }
+
+        function exportEdgesToClipboard() {
+            // Find the maximum distance across all associations
+            let maxDistance = 0;
+            Object.values(associations).forEach(distances => {
+                maxDistance = Math.max(maxDistance, ...distances);
+            });
+
+            // Calculate edges
+            const edges = calculateEdges(associations, maxDistance);
+
+            // Generate CSV content
+            let csvContent = "Concept 1,Concept 2,Strength of Connection\n";
+            edges.forEach(edge => {
+                csvContent += `${keywords[edge.source]},${keywords[edge.target]},${edge.weight.toFixed(2)}\n`;
+            });
+
+            // Copy to clipboard
+            navigator.clipboard.writeText(csvContent)
+                .then(() => {
+                    console.log("Edges copied to clipboard as CSV!");
+                })
+                .catch(err => {
+                    alert("Failed to copy edges to clipboard:", err);
+                });
         }
     </script>
 </body>
