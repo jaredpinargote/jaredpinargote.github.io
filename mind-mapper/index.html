@@ -20,8 +20,8 @@
 
     <div class="container">
         <div class="keywords-panel">
-            <h3>Current Reflection Prompt</h3>
-            <p>What are the most important things you learned today?</p>
+            <h3>Enter Your Thoughts</h3>
+            <p>Type a thought and press Enter. Type another thought and press Enter. When you press Enter on a blank line, your chain of thoughts is submitted to the network. Keep entering chains, and watch your network grow!</p>
             <div>
                 <input list="keywords-list" id="keyword-input" placeholder="Select or type a keyword..." autocomplete="off">
                 <div id="suggestions-list" class="suggestions-list"></div>
@@ -87,7 +87,7 @@
                         break;
                     case 'Enter':
                         event.preventDefault();
-                        const trimmedValue = keywordInput.value.trim();
+                        const trimmedValue = keywordInput.value.trim().toLowerCase();
 
                         if (trimmedValue === '') {
                             // If input is blank, save current session and start a new one
@@ -359,33 +359,29 @@
             updateUI();
             predictNextKeywords();
         }
-
         function saveSession() {
-            // Create associations for current session
-            for (let i = 0; i < currentKeywords.length; i++) {
-                for (let j = i + 1; j < currentKeywords.length; j++) {
-                    const idx1 = keywords.indexOf(currentKeywords[i]);
-                    const idx2 = keywords.indexOf(currentKeywords[j]);
-                    const distance = j - i - 1;
-
-                    // Create a key for the pair (always in ascending order)
-                    const key = `${Math.min(idx1, idx2)}-${Math.max(idx1, idx2)}`;
-
-                    // If the key already exists, append the new distance
-                    if (associations[key]) {
-                        associations[key].push(distance);
-                    } else {
-                        // Otherwise, initialize the key with an array of distances
-                        associations[key] = [distance];
-                    }
+            // Create associations only for immediate consecutive keywords
+            for (let i = 0; i < currentKeywords.length - 1; i++) {
+                // Get indices of consecutive keywords in the larger keywords array
+                const idx1 = keywords.indexOf(currentKeywords[i]);
+                const idx2 = keywords.indexOf(currentKeywords[i + 1]);
+                const distance = 0; // Immediate association implies no gap
+        
+                // Create a key for the pair (always in ascending order)
+                const key = `${Math.min(idx1, idx2)}-${Math.max(idx1, idx2)}`;
+        
+                // Append the distance or initialize the association
+                if (associations[key]) {
+                    associations[key].push(distance);
+                } else {
+                    associations[key] = [distance];
                 }
             }
-
+        
             // Save to localStorage
             localStorage.setItem('keywords', JSON.stringify(keywords));
             localStorage.setItem('associations', JSON.stringify(associations));
         }
-
         function exportData() {
             const data = {
                 keywords,
